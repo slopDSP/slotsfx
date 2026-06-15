@@ -19,6 +19,13 @@ import { closeFileBrowserDropdown, updateModelNameDisplay, updateIRNameDisplay, 
 
 // --- Slot sync callback (Rust → JS initial state restore) ---
 
+window.syncSnapshots = (snapshotsJsonStr) => {
+  try {
+    state.snapshots = JSON.parse(snapshotsJsonStr);
+    renderSnapshotsRow();
+  } catch (e) { console.error('syncSnapshots error:', e); }
+};
+
 window.syncSlots = (slotsJsonStr) => {
   try {
     if (JSON.stringify(state.routing_order) === slotsJsonStr) return;

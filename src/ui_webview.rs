@@ -73,6 +73,9 @@ enum IpcMessage {
 
     #[serde(rename = "update_slots")]
     UpdateSlots { slots: Vec<serde_json::Value> },
+
+    #[serde(rename = "save_snapshots")]
+    SaveSnapshots { snapshots: Vec<serde_json::Value> },
 }
 
 /// Custom dummy window wrapping raw win32 HWND and implementing HasWindowHandle/HasDisplayHandle
@@ -410,13 +413,17 @@ impl Editor for WebviewEditor {
                             // Empty profile hook callback
                         }
                         IpcMessage::UiReady => {
-                            // Sync the restored slots JSON state to the client GUI
                             let slots_json = params_clone.slots_json.lock().unwrap().clone();
+                            let snapshots_json = params_clone.snapshots_json.lock().unwrap().clone();
                             if let Some(wv_shared) = webview_weak_clone.upgrade() {
                                 if let Some(ref wv) = *wv_shared.lock().unwrap() {
+                                    fn escape_json(s: &str) -> String {
+                                        s.replace('\\', "\\\\").replace('\'', "\\'").replace('"', "\\\"")
+                                    }
                                     let script = format!(
-                                        "if (window.syncSlots) window.syncSlots('{}');",
-                                        slots_json.replace('\\', "\\\\").replace('\'', "\\'").replace('"', "\\\"")
+                                        "if (window.syncSlots) window.syncSlots('{}'); if (window.syncSnapshots) window.syncSnapshots('{}');",
+                                        escape_json(&slots_json),
+                                        escape_json(&snapshots_json)
                                     );
                                     let _ = wv.0.evaluate_script(&script);
                                 }
@@ -568,6 +575,11 @@ impl Editor for WebviewEditor {
                                     }
                                 }
                             }
+                        }
+                        IpcMessage::SaveSnapshots { snapshots } => {
+                            let json_str = serde_json::to_string(&snapshots).unwrap_or_default();
+                            *params_clone.snapshots_json.lock().unwrap() = json_str;
+                            params_clone.rt_snapshots.store(Arc::new(snapshots));
                         }
                     }
                 }

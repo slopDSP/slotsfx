@@ -1,0 +1,16 @@
+Snapshots:
+should adjust parameters in slots, even when reordered, it should know the specific instance
+snapshots should not affect gloabl gain etc.
+snapshots should not affect normalization
+
+Cab:
+by default just regular cab IR loader
+cab normalization, only when engaged
+cab capture - currently broken, capture itself was working fine, the ui loading was horrible, need to rework
+sender -> cab -> receiver structure (should be obvious from the code)
+sender sends the signal -> receiver profiles -> it takes the file and loads it in the slot -> A/B audition -> optional rename the file (there is already the edit name button)
+cab A/B - MAKE SURE THERE IS NO VOLUME DIFF!!!
+
+File loaders:
+should have a pop up menu with currently loaded directory, so possible to broswe from plugin (it was implemented, got broken)
+GLOBAL SETTINGS! There are already settings in the header menu for this - user should be able to set their ir/amps/captures/whatever directory once, and plugin should remember it (writes a settings file to disk?)
