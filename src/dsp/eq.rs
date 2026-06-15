@@ -35,17 +35,16 @@ impl Biquad {
         let cos_w0 = w0.cos();
         let sqrt_a = a.sqrt();
 
-        self.b1 = -2.0 * cos_w0;
-        self.b2 = 1.0 - alpha;
-        // Standard low shelf coefficients
-        self.a0 = a * ((a + 1.0) - (a - 1.0) * cos_w0 + 2.0 * sqrt_a * alpha);
-        self.a1 = 2.0 * a * ((a - 1.0) - (a + 1.0) * cos_w0);
-        self.a2 = a * ((a + 1.0) - (a - 1.0) * cos_w0 - 2.0 * sqrt_a * alpha);
-        // Normalize
-        let norm = (a + 1.0) + (a - 1.0) * cos_w0 + 2.0 * sqrt_a * alpha;
-        self.a0 /= norm; self.a1 /= norm; self.a2 /= norm;
-        self.b1 = -2.0 * cos_w0 / norm;
-        self.b2 = (1.0 - alpha) / norm;
+        // RBJ audio EQ cookbook low shelf filter
+        let b0 = a * ((a + 1.0) - (a - 1.0) * cos_w0 + 2.0 * sqrt_a * alpha);
+        let b1 = 2.0 * a * ((a - 1.0) - (a + 1.0) * cos_w0);
+        let b2 = a * ((a + 1.0) - (a - 1.0) * cos_w0 - 2.0 * sqrt_a * alpha);
+        let a0 = (a + 1.0) + (a - 1.0) * cos_w0 + 2.0 * sqrt_a * alpha;
+        let a1 = -2.0 * ((a - 1.0) + (a + 1.0) * cos_w0);
+        let a2 = (a + 1.0) + (a - 1.0) * cos_w0 - 2.0 * sqrt_a * alpha;
+
+        self.a0 = b0 / a0; self.a1 = b1 / a0; self.a2 = b2 / a0;
+        self.b1 = a1 / a0; self.b2 = a2 / a0;
     }
 
     pub fn set_high_shelf(&mut self, sample_rate: f32, freq: f32, gain_db: f32) {
@@ -55,12 +54,16 @@ impl Biquad {
         let cos_w0 = w0.cos();
         let sqrt_a = a.sqrt();
 
-        let norm = (a + 1.0) - (a - 1.0) * cos_w0 + 2.0 * sqrt_a * alpha;
-        self.a0 = a * ((a + 1.0) + (a - 1.0) * cos_w0 + 2.0 * sqrt_a * alpha) / norm;
-        self.a1 = -2.0 * a * ((a - 1.0) + (a + 1.0) * cos_w0) / norm;
-        self.a2 = a * ((a + 1.0) + (a - 1.0) * cos_w0 - 2.0 * sqrt_a * alpha) / norm;
-        self.b1 = 2.0 * cos_w0 / norm;
-        self.b2 = ((a - 1.0) + (a + 1.0) * cos_w0 - 2.0 * sqrt_a * alpha) / norm;
+        // RBJ audio EQ cookbook high shelf filter
+        let b0 = a * ((a + 1.0) + (a - 1.0) * cos_w0 + 2.0 * sqrt_a * alpha);
+        let b1 = -2.0 * a * ((a - 1.0) + (a + 1.0) * cos_w0);
+        let b2 = a * ((a + 1.0) + (a - 1.0) * cos_w0 - 2.0 * sqrt_a * alpha);
+        let a0 = (a + 1.0) - (a - 1.0) * cos_w0 + 2.0 * sqrt_a * alpha;
+        let a1 = 2.0 * ((a - 1.0) - (a + 1.0) * cos_w0);
+        let a2 = (a + 1.0) - (a - 1.0) * cos_w0 - 2.0 * sqrt_a * alpha;
+
+        self.a0 = b0 / a0; self.a1 = b1 / a0; self.a2 = b2 / a0;
+        self.b1 = a1 / a0; self.b2 = a2 / a0;
     }
 
     pub fn set_peaking(&mut self, sample_rate: f32, freq: f32, gain_db: f32, q: f32) {
@@ -69,34 +72,47 @@ impl Biquad {
         let a = 10.0_f32.powf(gain_db / 40.0);
         let cos_w0 = w0.cos();
 
-        let norm = 1.0 + alpha / a;
-        self.a0 = (1.0 + alpha * a) / norm;
-        self.a1 = -2.0 * cos_w0 / norm;
-        self.a2 = (1.0 - alpha * a) / norm;
-        self.b1 = 2.0 * cos_w0 / norm;
-        self.b2 = (alpha / a - 1.0) / norm;
+        // RBJ audio EQ cookbook peaking filter
+        let b0 = 1.0 + alpha * a;
+        let b1 = -2.0 * cos_w0;
+        let b2 = 1.0 - alpha * a;
+        let a0 = 1.0 + alpha / a;
+        let a1 = -2.0 * cos_w0;
+        let a2 = 1.0 - alpha / a;
+
+        self.a0 = b0 / a0; self.a1 = b1 / a0; self.a2 = b2 / a0;
+        self.b1 = a1 / a0; self.b2 = a2 / a0;
     }
 }
 
 pub struct ParametricEq {
-    lowshelf: Biquad,
-    peaking: Biquad,
-    highshelf: Biquad,
+    lowshelf_l: Biquad,
+    peaking_l: Biquad,
+    highshelf_l: Biquad,
+    lowshelf_r: Biquad,
+    peaking_r: Biquad,
+    highshelf_r: Biquad,
 }
 
 impl ParametricEq {
     pub fn new() -> Self {
         Self {
-            lowshelf: Biquad::new(),
-            peaking: Biquad::new(),
-            highshelf: Biquad::new(),
+            lowshelf_l: Biquad::new(),
+            peaking_l: Biquad::new(),
+            highshelf_l: Biquad::new(),
+            lowshelf_r: Biquad::new(),
+            peaking_r: Biquad::new(),
+            highshelf_r: Biquad::new(),
         }
     }
 
     pub fn reset(&mut self) {
-        self.lowshelf.reset();
-        self.peaking.reset();
-        self.highshelf.reset();
+        self.lowshelf_l.reset();
+        self.peaking_l.reset();
+        self.highshelf_l.reset();
+        self.lowshelf_r.reset();
+        self.peaking_r.reset();
+        self.highshelf_r.reset();
     }
 
     pub fn process(
@@ -112,19 +128,22 @@ impl ParametricEq {
         high_freq: f32,
         high_gain: f32,
     ) {
-        self.lowshelf.set_low_shelf(sample_rate, low_freq, low_gain);
-        self.peaking.set_peaking(sample_rate, mid_freq, mid_gain, mid_q);
-        self.highshelf.set_high_shelf(sample_rate, high_freq, high_gain);
+        // Update coefficients for both channels (same filter, independent state)
+        self.lowshelf_l.set_low_shelf(sample_rate, low_freq, low_gain);
+        self.peaking_l.set_peaking(sample_rate, mid_freq, mid_gain, mid_q);
+        self.highshelf_l.set_high_shelf(sample_rate, high_freq, high_gain);
+        self.lowshelf_r.set_low_shelf(sample_rate, low_freq, low_gain);
+        self.peaking_r.set_peaking(sample_rate, mid_freq, mid_gain, mid_q);
+        self.highshelf_r.set_high_shelf(sample_rate, high_freq, high_gain);
 
         for i in 0..left.len() {
-            left[i] = self.lowshelf.process_sample(left[i]);
-            left[i] = self.peaking.process_sample(left[i]);
-            left[i] = self.highshelf.process_sample(left[i]);
-        }
-        for i in 0..right.len() {
-            right[i] = self.lowshelf.process_sample(right[i]);
-            right[i] = self.peaking.process_sample(right[i]);
-            right[i] = self.highshelf.process_sample(right[i]);
+            left[i] = self.lowshelf_l.process_sample(left[i]);
+            left[i] = self.peaking_l.process_sample(left[i]);
+            left[i] = self.highshelf_l.process_sample(left[i]);
+
+            right[i] = self.lowshelf_r.process_sample(right[i]);
+            right[i] = self.peaking_r.process_sample(right[i]);
+            right[i] = self.highshelf_r.process_sample(right[i]);
         }
     }
 }

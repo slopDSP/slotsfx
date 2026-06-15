@@ -432,9 +432,9 @@ impl SlotsFxParams {
             amp_high: FloatParam::new("High", 0.5, FloatRange::Linear { min: 0.0, max: 1.0 }),
             amp_output: FloatParam::new("Output", 0.0, FloatRange::Linear { min: -12.0, max: 12.0 }),
 
-            amp_bass_freq: FloatParam::new("Bass Freq", 200.0, FloatRange::Linear { min: 80.0, max: 400.0 }),
-            amp_mid_freq: FloatParam::new("Mid Freq", 1000.0, FloatRange::Linear { min: 200.0, max: 2000.0 }),
-            amp_high_freq: FloatParam::new("High Freq", 4000.0, FloatRange::Linear { min: 2000.0, max: 8000.0 }),
+            amp_bass_freq: FloatParam::new("Bass Freq", 150.0, FloatRange::Linear { min: 80.0, max: 400.0 }),
+            amp_mid_freq: FloatParam::new("Mid Freq", 425.0, FloatRange::Linear { min: 200.0, max: 2000.0 }),
+            amp_high_freq: FloatParam::new("High Freq", 1800.0, FloatRange::Linear { min: 1000.0, max: 8000.0 }),
 
             gate_bypass: BoolParam::new("Gate Bypass", false),
             gate_threshold: FloatParam::new("Gate Threshold", -40.0, FloatRange::Linear { min: -60.0, max: 0.0 }),
@@ -556,6 +556,7 @@ impl Default for SlotsFx {
                                 block,
                                 model_path: path,
                                 model_name: name,
+                                eq: dsp::eq::ParametricEq::new(),
                             },
                             params: HashMap::new(),
                             tail_out: false,
@@ -912,6 +913,7 @@ impl Plugin for SlotsFx {
                                 block,
                                 model_path: path.clone(),
                                 model_name: name.clone(),
+                                eq: dsp::eq::ParametricEq::new(),
                             },
                             params: HashMap::new(),
                             tail_out: false,

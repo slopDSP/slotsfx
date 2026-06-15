@@ -45,6 +45,7 @@ pub enum EffectType {
         block: nam::NamBlock,
         model_path: Option<std::path::PathBuf>,
         model_name: String,
+        eq: eq::ParametricEq,
     },
     Cab {
         convolver: cab::CabConvolver,
@@ -82,6 +83,8 @@ pub struct PluginProcessor {
     /// Blocks that have been removed from the config but are still fading out.
     pub fading_out_blocks: Vec<EffectBlock>,
     pub sample_rate: f32,
+    /// Samples remaining in fade-in ramp after config update (masks clicks).
+    fade_ramp_remaining: u32,
 }
 
 impl PluginProcessor {
@@ -90,7 +93,24 @@ impl PluginProcessor {
             blocks: Vec::new(),
             fading_out_blocks: Vec::new(),
             sample_rate: 48000.0,
+            fade_ramp_remaining: 0,
         }
+    }
+
+    /// Apply a fade-in ramp to mask clicks after a config update.
+    fn apply_fade_ramp(&mut self, left: &mut [f32], right: &mut [f32]) {
+        if self.fade_ramp_remaining == 0 {
+            return;
+        }
+        let ramp_len = self.fade_ramp_remaining.min(left.len() as u32) as usize;
+        for i in 0..ramp_len {
+            let t = i as f32 / ramp_len as f32;
+            // Cosine fade: 0 → 1 (smooth start, no discontinuity)
+            let fade = 1.0 - f32::cos(std::f32::consts::PI * t * 0.5);
+            left[i] *= fade;
+            right[i] *= fade;
+        }
+        self.fade_ramp_remaining -= ramp_len as u32;
     }
 
     pub fn update_from_configs(&mut self, configs: Vec<SlotConfig>, params: &SlotsFxParams) {
@@ -195,6 +215,7 @@ impl PluginProcessor {
                                 block,
                                 model_path: config.path,
                                 model_name: config.name,
+                                eq: eq::ParametricEq::new(),
                             },
                             params: config.params,
                             tail_out,
@@ -423,6 +444,9 @@ impl PluginProcessor {
         }
 
         self.blocks = new_blocks;
+
+        // Fade-in ramp to mask clicks from block recreation / param changes
+        self.fade_ramp_remaining = (self.sample_rate * 0.005) as u32; // 5ms
     }
 
     pub fn process(
@@ -492,8 +516,6 @@ impl PluginProcessor {
                 }
             }
 
-            let nam_gain = 10.0_f32.powf(params.nam_gain.value() / 20.0);
-            let cab_gain = 10.0_f32.powf(params.cab_gain.value() / 20.0);
             let pitch_semi = params.pitch_semi.value();
             let pitch_mix = params.pitch_mix.value();
 
@@ -541,22 +563,44 @@ impl PluginProcessor {
                         right[i] = dry_r * (1.0 - pitch_mix) + dry_r * pitch_mix * shift;
                     }
                 }
-                EffectType::Nam { block: nam_block, .. } => {
+                EffectType::Nam { block: nam_block, eq, .. } => {
                     let start = std::time::Instant::now();
-                    nam_block.process(left, right, nam_gain);
+                    nam_block.process(left, right, params.nam_gain.value());
+
+                    // Post-model tone stack
+                    let bass_gain = (params.amp_bass.value() - 0.5) * 24.0;
+                    let mid_gain = (params.amp_middle.value() - 0.5) * 24.0;
+                    let high_gain = (params.amp_high.value() - 0.5) * 24.0;
+                    eq.process(left, right, self.sample_rate,
+                        params.amp_bass_freq.value(), bass_gain,
+                        params.amp_mid_freq.value(), mid_gain,
+                        1.0,
+                        params.amp_high_freq.value(), high_gain);
+
+                    // Output makeup gain
+                    let out_db = params.amp_output.value();
+                    if out_db != 0.0 {
+                        let g = 10.0_f32.powf(out_db / 20.0);
+                        for s in left.iter_mut() { *s *= g; }
+                        for s in right.iter_mut() { *s *= g; }
+                    }
+
                     nam_time_ns.store(start.elapsed().as_nanos() as u32, std::sync::atomic::Ordering::Relaxed);
                 }
                 EffectType::Cab { .. } => {
-                    let start = std::time::Instant::now();
-                    // Use global params (the per-slot block.params copy is stale during drag)
-                    let position = params.cab_position.value();
-                    let size = params.cab_size.value();
-                    let convolver = match &mut block.effect {
-                        EffectType::Cab { convolver, .. } => convolver,
-                        _ => unreachable!(),
-                    };
-                    convolver.process(left, right, cab_gain, position, size, self.sample_rate);
-                    cab_time_ns.store(start.elapsed().as_nanos() as u32, std::sync::atomic::Ordering::Relaxed);
+                    // Check global cab_bypass — when on, signal passes through clean
+                    if !params.cab_bypass.value() {
+                        let start = std::time::Instant::now();
+                        let position = params.cab_position.value();
+                        let size = params.cab_size.value();
+                        let convolver = match &mut block.effect {
+                            EffectType::Cab { convolver, .. } => convolver,
+                            _ => unreachable!(),
+                        };
+                        // Pass raw dB value — cab.rs does the dB→linear conversion
+                        convolver.process(left, right, params.cab_gain.value(), position, size, self.sample_rate);
+                        cab_time_ns.store(start.elapsed().as_nanos() as u32, std::sync::atomic::Ordering::Relaxed);
+                    }
                 }
                 EffectType::Delay { delay } => {
                     let feedback = params.delay_feedback.value();
@@ -605,6 +649,9 @@ impl PluginProcessor {
                 }
             }
         }
+
+        // Fade-in ramp after config updates to mask clicks
+        self.apply_fade_ramp(left, right);
     }
 }
 

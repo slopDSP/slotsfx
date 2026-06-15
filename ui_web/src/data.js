@@ -5,21 +5,21 @@ export const paramSpecs = {
   amp_gain: { min: -12.0, max: 12.0, type: 'db', label: 'Gain' },
   amp_bass: {
     min: 0.0, max: 1.0, type: 'percent', label: 'Bass',
-    subParams: { freq: { paramId: 'amp_bass_freq', label: '', min: 80, max: 400, default: 200 } }
+    subParams: { freq: { paramId: 'amp_bass_freq', label: '', min: 80, max: 400, default: 150 } }
   },
   amp_middle: {
     min: 0.0, max: 1.0, type: 'percent', label: 'Middle',
-    subParams: { freq: { paramId: 'amp_mid_freq', label: '', min: 200, max: 2000, default: 1000 } }
+    subParams: { freq: { paramId: 'amp_mid_freq', label: '', min: 200, max: 2000, default: 425 } }
   },
   amp_high: {
     min: 0.0, max: 1.0, type: 'percent', label: 'High',
-    subParams: { freq: { paramId: 'amp_high_freq', label: '', min: 2000, max: 8000, default: 4000 } }
+    subParams: { freq: { paramId: 'amp_high_freq', label: '', min: 1000, max: 8000, default: 1800 } }
   },
   amp_output: { min: -12.0, max: 12.0, type: 'db', label: 'Output' },
 
   amp_bass_freq: { min: 80.0, max: 400.0, type: 'hz', label: 'Bass Freq' },
   amp_mid_freq: { min: 200.0, max: 2000.0, type: 'hz', label: 'Mid Freq' },
-  amp_high_freq: { min: 2000.0, max: 8000.0, type: 'hz', label: 'High Freq' },
+  amp_high_freq: { min: 1000.0, max: 8000.0, type: 'hz', label: 'High Freq' },
 
   cab_gain: { min: -12.0, max: 12.0, type: 'db', label: 'Gain' },
   cab_position: { min: 0.0, max: 1.0, type: 'percent', label: 'Position' },

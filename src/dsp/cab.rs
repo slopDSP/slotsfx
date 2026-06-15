@@ -1,12 +1,22 @@
+/// Target RMS level for normalized IRs (-30dB = 0.0316 linear).
+/// Low enough that normalized IRs don't blow up the output;
+/// the user can use cab_gain to add makeup if needed.
+const TARGET_RMS: f32 = 0.0316;
+/// Maximum boost allowed from normalization (+3dB).
+/// Prevents quiet IRs from getting massively over-amplified.
+const MAX_BOOST: f32 = 1.41;
+
 pub struct CabConvolver {
     ir_l: Vec<f32>,
     ir_r: Vec<f32>,
     buffer_l: Vec<f32>,
     buffer_r: Vec<f32>,
     pos: usize,
-    /// Peak of the original IR (for normalization)
+    /// Peak of the original raw IR (before normalization scaling)
     ir_peak: f32,
-    /// Current normalization: true = IR samples are pre-scaled by 1/ir_peak, false = raw IR
+    /// RMS of the original raw IR (before normalization scaling)
+    ir_rms: f32,
+    /// Current normalization state
     normalize: bool,
 }
 
@@ -19,19 +29,30 @@ impl CabConvolver {
             buffer_r: Vec::new(),
             pos: 0,
             ir_peak: 1.0,
+            ir_rms: 1.0,
             normalize: false,
         }
     }
 
     pub fn set_ir(&mut self, left: Vec<f32>, right: Vec<f32>, normalize: bool) {
-        // Compute peak of the raw IR
+        // Compute peak and RMS of the raw IR
         let mut peak = 0.0f32;
-        for &s in &left { peak = peak.max(s.abs()); }
-        for &s in &right { peak = peak.max(s.abs()); }
+        let mut sum_sq = 0.0f32;
+        let total = (left.len() + right.len()) as f32;
+        for &s in &left {
+            peak = peak.max(s.abs());
+            sum_sq += s * s;
+        }
+        for &s in &right {
+            peak = peak.max(s.abs());
+            sum_sq += s * s;
+        }
         self.ir_peak = peak.max(1e-8);
+        self.ir_rms = (sum_sq / total).max(1e-8).sqrt();
 
-        // Apply normalization: scale IR samples so peak = 1.0
-        let scale = if normalize { 1.0 / self.ir_peak } else { 1.0 };
+        // Normalize to target with capped boost (prevents quiet IR blowup)
+        let raw_scale = TARGET_RMS / self.ir_rms;
+        let scale = if normalize { raw_scale.min(MAX_BOOST) } else { 1.0 };
         self.normalize = normalize;
 
         self.ir_l = left.iter().map(|&s| s * scale).collect();
@@ -51,12 +72,9 @@ impl CabConvolver {
         if self.ir_l.is_empty() || self.normalize == normalize {
             return;
         }
-        // Current IR is already in some scale; we need to undo the old scale
-        // and apply the new one. Since we stored scaled values, the "base" peak
-        // is what we called ir_peak. Current scale = (normalize ? 1/ir_peak : 1.0).
-        // To switch: multiply by (new_scale / old_scale).
-        let old_scale = if self.normalize { 1.0 / self.ir_peak } else { 1.0 };
-        let new_scale = if normalize { 1.0 / self.ir_peak } else { 1.0 };
+        let raw_scale = TARGET_RMS / self.ir_rms;
+        let old_scale = if self.normalize { raw_scale.min(MAX_BOOST) } else { 1.0 };
+        let new_scale = if normalize { raw_scale.min(MAX_BOOST) } else { 1.0 };
         let rel_scale = new_scale / old_scale;
 
         for s in self.ir_l.iter_mut() { *s *= rel_scale; }

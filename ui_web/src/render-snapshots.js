@@ -125,21 +125,16 @@ export function recallSnapshot(index) {
 
     if (snap.params) {
       Object.entries(snap.params).forEach(([paramId, val]) => {
+        // Keep global settings fixed across snapshots
+        if (paramId === 'cab_normalize' || paramId === 'amp_normalize' ||
+            paramId === 'input_gain' || paramId === 'output_gain' ||
+            paramId === 'pitch_semi' || paramId.startsWith('macro_')) return;
+
         state.routing_order.forEach(slot => {
           if (slot.params && slot.params[paramId] !== undefined) {
             slot.params[paramId] = val;
           }
         });
-        if (paramId === 'input_gain') {
-          state.input_gain = val;
-          updateHeaderGainUI('input', val);
-        } else if (paramId === 'output_gain') {
-          state.output_gain = val;
-          updateHeaderGainUI('output', val);
-        } else if (paramId === 'pitch_semi') {
-          state.pitch_semi = val;
-          updateHeaderTransposeUI(val);
-        }
         sendIPCMessage('set_param', { param_id: paramId, value: val });
       });
     }
