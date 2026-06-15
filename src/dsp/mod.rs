@@ -130,99 +130,171 @@ impl PluginProcessor {
                     });
                 }
                 "amp" => {
-                    let mut block = nam::NamBlock::new();
-                    if let Some(ref p) = config.path {
-                        if let Some(model_file) = nam_cache.get(p) {
-                            let loudness = model_file.loudness();
-                            if let (Ok(ml), Ok(mr)) = (
-                                nam_rs::Model::from_nam(model_file),
-                                nam_rs::Model::from_nam(model_file),
-                            ) {
-                                block.set_models(Some(ml), Some(mr), loudness);
+                    // Reuse existing NAM block when model path hasn't changed
+                    let reused = if let Some(mut existing_block) = existing.remove(&config.id) {
+                        let should_reuse = match &existing_block.effect {
+                            EffectType::Nam { model_path, .. } => match (model_path, &config.path) {
+                                (Some(a), Some(b)) => a == b,
+                                (None, None) => true,
+                                _ => false,
+                            },
+                            _ => false,
+                        };
+                        if should_reuse {
+                            if let EffectType::Nam { model_path, model_name, .. } = &mut existing_block.effect {
+                                *model_path = config.path.clone();
+                                *model_name = config.name.clone();
                             }
-                        } else if p.exists() {
-                            if let Ok(model_file) = nam_rs::NamModel::from_file(p) {
+                            existing_block.bypassed = config.bypassed;
+                            existing_block.pan = config.pan;
+                            existing_block.lane = config.lane.clone();
+                            existing_block.params = config.params.clone();
+                            existing_block.tail_out = tail_out;
+                            existing_block.fading_out = false;
+                            existing_block.fade_gain = 1.0;
+                            new_blocks.push(existing_block);
+                            true
+                        } else {
+                            false
+                        }
+                    } else {
+                        false
+                    };
+
+                    if !reused {
+                        let mut block = nam::NamBlock::new();
+                        if let Some(ref p) = config.path {
+                            if let Some(model_file) = nam_cache.get(p) {
                                 let loudness = model_file.loudness();
                                 if let (Ok(ml), Ok(mr)) = (
-                                    nam_rs::Model::from_nam(&model_file),
-                                    nam_rs::Model::from_nam(&model_file),
+                                    nam_rs::Model::from_nam(model_file),
+                                    nam_rs::Model::from_nam(model_file),
                                 ) {
                                     block.set_models(Some(ml), Some(mr), loudness);
-                                    nam_cache.insert(p.clone(), Arc::new(model_file));
+                                }
+                            } else if p.exists() {
+                                if let Ok(model_file) = nam_rs::NamModel::from_file(p) {
+                                    let loudness = model_file.loudness();
+                                    if let (Ok(ml), Ok(mr)) = (
+                                        nam_rs::Model::from_nam(&model_file),
+                                        nam_rs::Model::from_nam(&model_file),
+                                    ) {
+                                        block.set_models(Some(ml), Some(mr), loudness);
+                                        nam_cache.insert(p.clone(), Arc::new(model_file));
+                                    }
                                 }
                             }
                         }
+                        new_blocks.push(EffectBlock {
+                            id: config.id,
+                            slot_type: slot_type.to_string(),
+                            bypassed: config.bypassed,
+                            pan: config.pan,
+                            lane: config.lane,
+                            effect: EffectType::Nam {
+                                block,
+                                model_path: config.path,
+                                model_name: config.name,
+                            },
+                            params: config.params,
+                            tail_out,
+                            fading_out: false,
+                            fade_gain: 1.0,
+                        });
                     }
-                    new_blocks.push(EffectBlock {
-                        id: config.id,
-                        slot_type: slot_type.to_string(),
-                        bypassed: config.bypassed,
-                        pan: config.pan,
-                        lane: config.lane,
-                        effect: EffectType::Nam {
-                            block,
-                            model_path: config.path,
-                            model_name: config.name,
-                        },
-                        params: config.params,
-                        tail_out,
-                        fading_out: false,
-                        fade_gain: 1.0,
-                    });
                 }
                 "cab" => {
-                    let mut convolver = cab::CabConvolver::new();
                     let do_normalize = config.params.get("cab_normalize")
                         .copied()
+                        .map(|v| v > 0.5)
                         .unwrap_or(true);
-                    if let Some(ref p) = config.path {
-                        if let Some((ir_l, ir_r)) = cab_cache.get(p) {
-                            convolver.set_ir(ir_l.clone(), ir_r.clone(), do_normalize);
-                        } else if p.exists() {
-                            if let Ok(mut reader) = hound::WavReader::open(p) {
-                                let spec = reader.spec();
-                                let samples: Vec<f32> = match spec.sample_format {
-                                    hound::SampleFormat::Float => {
-                                        reader.samples::<f32>().filter_map(Result::ok).collect()
-                                    }
-                                    hound::SampleFormat::Int => {
-                                        let max_val = (1 << (spec.bits_per_sample - 1)) as f32;
-                                        reader.samples::<i32>()
-                                            .filter_map(Result::ok)
-                                            .map(|s| s as f32 / max_val)
-                                            .collect()
-                                    }
-                                };
-                                if !samples.is_empty() {
-                                    let (ir_l, ir_r) = if spec.channels == 2 {
-                                        (samples.iter().step_by(2).copied().collect(),
-                                         samples.iter().skip(1).step_by(2).copied().collect())
-                                    } else {
-                                        (samples.clone(), samples)
+
+                    // Reuse existing cab block when IR path hasn't changed (preserves buffer, avoids clicks)
+                    let reused = if let Some(mut existing_block) = existing.remove(&config.id) {
+                        let should_reuse = match &existing_block.effect {
+                            EffectType::Cab { ir_path, .. } => match (ir_path, &config.path) {
+                                (Some(a), Some(b)) => a == b,
+                                (None, None) => true,
+                                _ => false,
+                            },
+                            _ => false,
+                        };
+                        if should_reuse {
+                            if let EffectType::Cab { convolver, normalize, ir_path, ir_name } = &mut existing_block.effect {
+                                if *normalize != do_normalize {
+                                    convolver.set_normalize(do_normalize);
+                                    *normalize = do_normalize;
+                                }
+                                *ir_path = config.path.clone();
+                                *ir_name = config.name.clone();
+                            }
+                            existing_block.bypassed = config.bypassed;
+                            existing_block.pan = config.pan;
+                            existing_block.lane = config.lane.clone();
+                            existing_block.params = config.params.clone();
+                            existing_block.tail_out = tail_out;
+                            existing_block.fading_out = false;
+                            existing_block.fade_gain = 1.0;
+                            new_blocks.push(existing_block);
+                            true
+                        } else {
+                            false
+                        }
+                    } else {
+                        false
+                    };
+
+                    if !reused {
+                        let mut convolver = cab::CabConvolver::new();
+                        if let Some(ref p) = config.path {
+                            if let Some((ir_l, ir_r)) = cab_cache.get(p) {
+                                convolver.set_ir(ir_l.clone(), ir_r.clone(), do_normalize);
+                            } else if p.exists() {
+                                if let Ok(mut reader) = hound::WavReader::open(p) {
+                                    let spec = reader.spec();
+                                    let samples: Vec<f32> = match spec.sample_format {
+                                        hound::SampleFormat::Float => {
+                                            reader.samples::<f32>().filter_map(Result::ok).collect()
+                                        }
+                                        hound::SampleFormat::Int => {
+                                            let max_val = (1 << (spec.bits_per_sample - 1)) as f32;
+                                            reader.samples::<i32>()
+                                                .filter_map(Result::ok)
+                                                .map(|s| s as f32 / max_val)
+                                                .collect()
+                                        }
                                     };
-                                    convolver.set_ir(ir_l.clone(), ir_r.clone(), do_normalize);
-                                    cab_cache.insert(p.clone(), (ir_l, ir_r));
+                                    if !samples.is_empty() {
+                                        let (ir_l, ir_r) = if spec.channels == 2 {
+                                            (samples.iter().step_by(2).copied().collect(),
+                                             samples.iter().skip(1).step_by(2).copied().collect())
+                                        } else {
+                                            (samples.clone(), samples)
+                                        };
+                                        convolver.set_ir(ir_l.clone(), ir_r.clone(), do_normalize);
+                                        cab_cache.insert(p.clone(), (ir_l, ir_r));
+                                    }
                                 }
                             }
                         }
+                        new_blocks.push(EffectBlock {
+                            id: config.id,
+                            slot_type: slot_type.to_string(),
+                            bypassed: config.bypassed,
+                            pan: config.pan,
+                            lane: config.lane,
+                            effect: EffectType::Cab {
+                                convolver,
+                                ir_path: config.path,
+                                ir_name: config.name,
+                                normalize: do_normalize,
+                            },
+                            params: config.params,
+                            tail_out,
+                            fading_out: false,
+                            fade_gain: 1.0,
+                        });
                     }
-                    new_blocks.push(EffectBlock {
-                        id: config.id,
-                        slot_type: slot_type.to_string(),
-                        bypassed: config.bypassed,
-                        pan: config.pan,
-                        lane: config.lane,
-                        effect: EffectType::Cab {
-                            convolver,
-                            ir_path: config.path,
-                            ir_name: config.name,
-                            normalize: do_normalize,
-                        },
-                        params: config.params,
-                        tail_out,
-                        fading_out: false,
-                        fade_gain: 1.0,
-                    });
                 }
                 "delay" => {
                     // Reuse existing delay block to preserve its buffer state.
@@ -474,16 +546,16 @@ impl PluginProcessor {
                     nam_block.process(left, right, nam_gain);
                     nam_time_ns.store(start.elapsed().as_nanos() as u32, std::sync::atomic::Ordering::Relaxed);
                 }
-                EffectType::Cab { convolver, normalize, .. } => {
+                EffectType::Cab { .. } => {
                     let start = std::time::Instant::now();
-                    // Pull per-slot params from the block; fall back to global params
-                    let position = block.params.get("cab_position")
-                        .copied()
-                        .unwrap_or_else(|| params.cab_position.value());
-                    let size = block.params.get("cab_size")
-                        .copied()
-                        .unwrap_or_else(|| params.cab_size.value());
-                    convolver.process(left, right, cab_gain, position, size);
+                    // Use global params (the per-slot block.params copy is stale during drag)
+                    let position = params.cab_position.value();
+                    let size = params.cab_size.value();
+                    let convolver = match &mut block.effect {
+                        EffectType::Cab { convolver, .. } => convolver,
+                        _ => unreachable!(),
+                    };
+                    convolver.process(left, right, cab_gain, position, size, self.sample_rate);
                     cab_time_ns.store(start.elapsed().as_nanos() as u32, std::sync::atomic::Ordering::Relaxed);
                 }
                 EffectType::Delay { delay } => {

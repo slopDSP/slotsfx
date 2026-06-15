@@ -1115,23 +1115,21 @@ impl Plugin for SlotsFx {
             for block in &mut self.processor.blocks {
                 if let crate::dsp::EffectType::Cab { convolver, normalize, .. } = &mut block.effect {
                     convolver.set_ir(ir_l.clone(), ir_r.clone(), *normalize);
-                    break;
                 }
             }
         }
 
         // Also drain normalize toggle messages sent via the dedicated channel
-        while let Ok((normalize, ir_l, ir_r)) = self.cab_normalize_receiver.pop() {
+        while let Ok((normalize, ref ir_l, ref ir_r)) = self.cab_normalize_receiver.pop() {
             for block in &mut self.processor.blocks {
                 if let crate::dsp::EffectType::Cab { convolver, .. } = &mut block.effect {
-                    if let (Some(l), Some(r)) = (ir_l, ir_r) {
+                    if let (Some(l), Some(r)) = (ir_l.as_ref(), ir_r.as_ref()) {
                         // Reload IR with new normalize state
-                        convolver.set_ir(l, r, normalize);
+                        convolver.set_ir(l.clone(), r.clone(), normalize);
                     } else {
                         // Just toggle normalization without reloading IR
                         convolver.set_normalize(normalize);
                     }
-                    break;
                 }
             }
         }

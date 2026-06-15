@@ -66,15 +66,15 @@ impl CabConvolver {
 
     /// position: 0.0 = close mic (direct), 1.0 = far mic (delayed start)
     /// size: 0.0 = small room (faster decay), 1.0 = large room (longer tail)
-    pub fn process(&mut self, left: &mut [f32], right: &mut [f32], gain_db: f32, position: f32, size: f32) {
+    pub fn process(&mut self, left: &mut [f32], right: &mut [f32], gain_db: f32, position: f32, size: f32, sample_rate: f32) {
         if self.ir_l.is_empty() {
             return;
         }
         let gain = 10.0_f32.powf(gain_db / 20.0);
         let ir_len = self.ir_l.len();
 
-        // Pre-delay: position 0→1 maps to 0→50ms delay at 44100 Hz
-        let pre_delay_samples = (position * 50.0 * 44100.0 / 1000.0) as usize;
+        // Pre-delay: position 0→1 maps to 0→50ms delay
+        let pre_delay_samples = (position * 50.0 * sample_rate / 1000.0) as usize;
         let pre_delay_clamped = pre_delay_samples.min(ir_len.saturating_sub(1));
 
         // Tail fade: size 0→1 maps to tail starting at 10%→50% of IR length
