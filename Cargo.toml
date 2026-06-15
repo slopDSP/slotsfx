@@ -1,0 +1,30 @@
+[package]
+name = "slotsfx"
+version = "0.1.0"
+edition = "2021"
+build = "build.rs"
+
+[lib]
+crate-type = ["cdylib", "lib"]
+
+[[bin]]
+name = "slotsfx-debug"
+path = "src/main.rs"
+
+[dependencies]
+nih_plug = { git = "https://github.com/robbert-vdh/nih-plug.git", default-features = false, features = ["assert_process_allocs", "vst3", "standalone"] }
+nih_plug_egui = { git = "https://github.com/robbert-vdh/nih-plug.git" }
+nam-rs = "0.3.0"
+hound = "3.5"
+rtrb = "0.3"
+rfd = "0.14"
+arc-swap = "1.7"
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+baseview = "0.1"
+wry = "0.44"
+tao = "0.29"
+include_dir = "0.7"
+http = "1"
+windows = { version = "0.58", features = ["Win32_UI_WindowsAndMessaging", "Foundation"] }
+rustfft = "6.2"

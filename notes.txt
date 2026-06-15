@@ -1,0 +1,115 @@
+ui test server:
+cd c:\soft_projects\NAM\ui_web
+npm run dev
+
+---------
+Really important - the 3rd party plugin integration - why i made this in the firt place is, cause nam plugin was really bare bones and 
+i wanted a single plugin where i can host and automate my guitar chain. that is why we neeed to implement this!!
+
+Profiling:
+nam
+ir
+i need some kind of eeeasy way to capture these.
+let's start with ir's - could i load a plugin before (or inside this, but before would do too, if this works) and place slotsfx after,
+then feed the profiling signal inside the channel input (does that even work like that???) and then capture it in the block, test it,
+and if i like it, save it - does that work? or would it be better to integrate the hosting of other vsts, so that it is all done inside the plugin
+
+and similar for nam profiles - could i do it all inside the plugin?
+
+it would be killer feature, super convinient and make the process seamless
+inspiration - spectrum thief plugin, it is really convinient 
+--------
+Second really important - snapshots!!!
+The other use case - live rig (will start with guitar, but might use this for other things)
+Basically, i want to activate and deactivate slots by changing snapshots, it would mean i could expose them to the daw and automate 
+slots by automating snapshot changes - super convinient!!!!
+It would go together with global macros - i could assign one or single value to a global macro and automate them together
+which would enable me to control multiple things by automating just one parameter, again - killer automation tool!
+----
+
+So, these then would be the core important features that would make this an amazing tool for fast and effective workflow, both 
+creating and capturing sounds and then using them live.
+
+-----
+
+hm, i thinking about the ableton simpler/sampler copy - could i just make that a slot? basically, it would load grid, with a sampler in each slot
+and then i could make the sampler a slot itself, with modes like ableton simple, one shot etc., with all the tools they have and more... hm...
+maybe even launch matrix integration - i have launchpad, ive tried playtime 2, but it does not cut it for me.... 
+so, pads: 
+could be either sampler mode or the 'play' mode, basically act as ableton launch matrix
+and sampler:
+basically the same as ableton
+and file broser, so i can drag and drop samples and auto slice them like in ableton, but more flexible
+
+this would mean multi track operation and routing... and midi. basically a pseudo daw.
+could use realearn for mapping, to ease this up... and make it like multi track live performance daw controler/effects rack
+but then - do we allow multi input? or single input and multi output? if only single input, it would not handle multiple elements being processed at the same time, so that would be a must in that case.
+that could also mean, that i would have to allow change input and ouput for each slot? or multiple racks, for each input?
+mockups? visual is very important...
+
+hm, so maybe makeing the rack acts as some sort of grid? inputs at the top, each column is a single channel, then it does not sound even that complicated...
+i could change channel count, default is 2, then it would act as it acts now:
+l in  | r in
+slot  | slot
+slot  | slot
+  wide slot
+slot  | slot
+l out | r out
+
+but then, if change the in/out count:
+1 in | 2 in | 3 in | 4 in
+slot | slot | slot | slot
+ wide slot (affects all?)
+slot | slot | slot | slot
+
+16 stereo / 32 mono max in / out?
+
+think mixture between uvi falcon (but actually usable/intuitive lmao), ableton samplers/racks and clip launcher + incredible flexibility and usability.
+grid controllers then become control center:
+session - 2 modes:
+rack controller - turns off effects and shit
+clip launcher
+
+but would then even pads slot make sense?
+if i have the grid rack, i could loud a bunch of samplers (via auto cut (but the also - sequencer?? dont need it begin with, could feed of daw, but for standalone operation, using daw only host?))
+then the 2 session modes do not make sense - the grid is mutable?
+hm, but reaper limits input to stereo, so might not be that straight forward.... unless it can get inputs straight from the interface and truly just use the daw as a host. but i drag and drop sends from other tracks,
+so this is not even a limitation.... scratch that whole limiation, i can change change input channel count in reaper too....
+
+hm, so maybe - 2 rack grids! meaning:
+the standart rack grid (inputs)
+center inspector
+right output matrix grid?
+but is this even the best approach?
+keep in mind mixed use - audio/midi/and advanced sampling
+
+either this, or we go with - 1 instrument = 1 instance approach, with multi instance overview, like with fabfilter latest updates
+instance still has the grid, but grid can be extended up to 8 column grid, to handle midi samplers, making it perfect for audio and midi sampling, but then do keep the pads slot? with the full ableton rack functionality?
+but then maybe 2 quasy modes? audio/midi(multi out)
+or make each channel or pair either:
+mono
+stereo/pair
+midi
+
+but if a midi channel is the rack, it will have multi out...
+
+then midi channels would be treated the same way as ableton, as individual racks
+
+but then, what do i gain by slamming it one plugin? not saying im not, but am i, idk
+and for audio processing, i get what i need with the 2 channels... so, would the workflows obstruct each other?
+so make:
+slotsfx - stereo | instruments fx, both mid and audio
+pads/rack - multi channel | midi the super cool sampler with all the fx from slots... basically, rack for each channel of the sampler, and then all the clip launching extra functionality
+but make them talk to each other, and be overviewable from each other, making it the ultimate performance suite
+but then it would still be the same 2 left/right grid paradigm, just with the multi track one, each pad / sampler will have its own rack
+
+any how - i need this in a future proposal dock, so it is laid out and i can see the direction more clearly
+
+-----
+
+the macros is a mess - if i assign a param to macro, and i have multiple instances of that fx, it will change all the matching values - completely wrong!
+and i think there are similar issues when multiple instances of the same slot are opened, it think there is fundamentally something wrong with handlking duplicate instances of plugins/slots. it should not happen.
+
+besides the macros, do you see anything else fundamentally wrong with how instances are handle that would cause shit like that?
+
+---
