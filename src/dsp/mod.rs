@@ -7,6 +7,10 @@ pub mod bitcrusher;
 pub mod overdrive;
 pub mod eq;
 pub mod deconvolve;
+pub mod pitch_detector;
+pub mod pitch_shifter;
+pub mod tuner;
+pub mod autotune;
 
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -40,7 +44,9 @@ pub struct EffectBlock {
 }
 
 pub enum EffectType {
-    Pitch,
+    Pitch {
+        shifter: pitch_shifter::PitchShifter,
+    },
     Nam {
         block: nam::NamBlock,
         model_path: Option<std::path::PathBuf>,
@@ -85,6 +91,8 @@ pub struct PluginProcessor {
     pub sample_rate: f32,
     /// Samples remaining in fade-in ramp after config update (masks clicks).
     fade_ramp_remaining: u32,
+    pub tuner: tuner::Tuner,
+    pub autotune: autotune::AutoTune,
 }
 
 impl PluginProcessor {
@@ -94,6 +102,8 @@ impl PluginProcessor {
             fading_out_blocks: Vec::new(),
             sample_rate: 48000.0,
             fade_ramp_remaining: 0,
+            tuner: tuner::Tuner::new(48000.0),
+            autotune: autotune::AutoTune::new(48000.0, autotune::AutoTuneConfig::default()),
         }
     }
 
@@ -142,7 +152,9 @@ impl PluginProcessor {
                         bypassed: config.bypassed,
                         pan: config.pan,
                         lane: config.lane,
-                        effect: EffectType::Pitch,
+                        effect: EffectType::Pitch {
+                            shifter: pitch_shifter::PitchShifter::new(self.sample_rate, pitch_shifter::ShiftMode::PsoLa),
+                        },
                         params: config.params,
                         tail_out,
                         fading_out: false,
@@ -457,15 +469,63 @@ impl PluginProcessor {
         nam_time_ns: &std::sync::atomic::AtomicU32,
         cab_time_ns: &std::sync::atomic::AtomicU32,
         _slot_peaks: &[std::sync::atomic::AtomicU32; 16],
+        tuner_state: &std::sync::atomic::AtomicU64,
     ) {
         let mut to_drop = Vec::new();
-        let fade_rate = 1.0 / (self.sample_rate * 0.5); // ~0.5s fade-out at 48kHz
+        let fade_rate = 1.0 / (self.sample_rate * 0.5);
+
+        // --- Run tuner on input (non-destructive) ---
+        self.tuner.process(left);
+
+        // --- Run auto-tune on input (modifies audio if enabled) ---
+        {
+            let autotune_cfg = autotune::AutoTuneConfig {
+                enabled: params.auto_tune_toggle.value(),
+                root_key: params.auto_tune_key.value() as u8,
+                scale: match params.auto_tune_scale.value() as u8 {
+                    0 => pitch_detector::ScaleType::Chromatic,
+                    1 => pitch_detector::ScaleType::Major,
+                    2 => pitch_detector::ScaleType::Minor,
+                    _ => pitch_detector::ScaleType::Chromatic,
+                },
+                mode: if params.auto_tune_mode.value() {
+                    pitch_shifter::ShiftMode::PhaseVocoder
+                } else {
+                    pitch_shifter::ShiftMode::PsoLa
+                },
+                retune_speed: params.auto_tune_speed.value(),
+                correction_amount: params.auto_tune_amount.value(),
+            };
+            self.autotune.update_config(autotune_cfg);
+            if autotune_cfg.enabled {
+                let mut tun_l = vec![0.0f32; left.len()];
+                let mut tun_r = vec![0.0f32; right.len()];
+                self.autotune.process(left, &mut tun_l, 0);
+                self.autotune.process(right, &mut tun_r, 1);
+                left.copy_from_slice(&tun_l);
+                right.copy_from_slice(&tun_r);
+            }
+        }
+
+        // --- Publish tuner state to UI ---
+        {
+            let tuner_state_val = self.tuner.state();
+            let packed: u64 = if tuner_state_val.active {
+                let cents_scaled = (tuner_state_val.cents * 100.0).round() as i16;
+                (cents_scaled as u64 & 0xFFFF) << 32
+                    | ((tuner_state_val.note as u64) & 0xFF) << 24
+                    | ((tuner_state_val.octave as u8 as u64) & 0xFF) << 16
+                    | (1u64 << 8)
+            } else {
+                0u64
+            };
+            tuner_state.store(packed, std::sync::atomic::Ordering::Relaxed);
+        }
 
         // --- Process fading_out_blocks first ---
         for (i, block) in self.fading_out_blocks.iter_mut().enumerate() {
             let slot_type = &block.slot_type;
             if matches!(slot_type.as_str(), "delay" | "verb" | "shimmer") {
-                // Feed silence to let the tail ring out.
                 let mut silent_l = vec![0.0f32; left.len()];
                 let mut silent_r = vec![0.0f32; right.len()];
                 match &mut block.effect {
@@ -486,7 +546,6 @@ impl PluginProcessor {
                     }
                     _ => {}
                 }
-                // Apply fade gain to the tail output.
                 for i in 0..left.len() {
                     left[i] += silent_l[i] * block.fade_gain;
                     right[i] += silent_r[i] * block.fade_gain;
@@ -497,20 +556,16 @@ impl PluginProcessor {
                 }
             }
         }
-        // Remove fully-faded blocks (iterate in reverse to preserve indices).
         for i in to_drop.into_iter().rev() {
             self.fading_out_blocks.remove(i);
         }
 
         // --- Process active blocks ---
         for block in &mut self.blocks {
-            // Bypass: either skip or tail-out.
             if block.bypassed {
                 if block.tail_out && is_space_effect(&block.slot_type) {
-                    // Start fading out this block.
                     block.fading_out = true;
                     block.fade_gain = 1.0;
-                    // Continue below to process with silence.
                 } else {
                     continue;
                 }
@@ -519,7 +574,6 @@ impl PluginProcessor {
             let pitch_semi = params.pitch_semi.value();
             let pitch_mix = params.pitch_mix.value();
 
-            // Space effects that are fading out: feed silence, apply fade ramp.
             if block.fading_out {
                 let mut silent_l = vec![0.0f32; left.len()];
                 let mut silent_r = vec![0.0f32; right.len()];
@@ -553,14 +607,24 @@ impl PluginProcessor {
                 continue;
             }
 
+            let pitch_period = if self.tuner.state().active {
+                self.sample_rate / self.tuner.state().frequency
+            } else {
+                0.0
+            };
+
             match &mut block.effect {
-                EffectType::Pitch => {
+                EffectType::Pitch { shifter } => {
+                    if pitch_mix <= 0.0 {
+                        continue;
+                    }
+                    let mut wet_l = vec![0.0f32; left.len()];
+                    let mut wet_r = vec![0.0f32; right.len()];
+                    shifter.process(left, &mut wet_l, pitch_period, pitch_semi);
+                    shifter.process(right, &mut wet_r, pitch_period, pitch_semi);
                     for i in 0..left.len() {
-                        let dry_l = left[i];
-                        let dry_r = right[i];
-                        let shift = 2.0_f32.powf(pitch_semi / 12.0);
-                        left[i] = dry_l * (1.0 - pitch_mix) + dry_l * pitch_mix * shift;
-                        right[i] = dry_r * (1.0 - pitch_mix) + dry_r * pitch_mix * shift;
+                        left[i] = left[i] * (1.0 - pitch_mix) + wet_l[i] * pitch_mix;
+                        right[i] = right[i] * (1.0 - pitch_mix) + wet_r[i] * pitch_mix;
                     }
                 }
                 EffectType::Nam { block: nam_block, eq, .. } => {

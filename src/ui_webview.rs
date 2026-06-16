@@ -239,6 +239,14 @@ impl Editor for WebviewEditor {
                                 "pitch_semi" | "semi" => setter.set_parameter(&params_clone.pitch_semi, value),
                                 "pitch_mix" => setter.set_parameter(&params_clone.pitch_mix, value),
 
+                                // Auto-Tune
+                                "auto_tune_toggle" => setter.set_parameter(&params_clone.auto_tune_toggle, value > 0.5),
+                                "auto_tune_key" => setter.set_parameter(&params_clone.auto_tune_key, value as i32),
+                                "auto_tune_scale" => setter.set_parameter(&params_clone.auto_tune_scale, value as i32),
+                                "auto_tune_mode" => setter.set_parameter(&params_clone.auto_tune_mode, value > 0.5),
+                                "auto_tune_speed" => setter.set_parameter(&params_clone.auto_tune_speed, value),
+                                "auto_tune_amount" => setter.set_parameter(&params_clone.auto_tune_amount, value),
+
                                 // Delay
                                 "delay_mix" => setter.set_parameter(&params_clone.delay_mix, value),
                                 "delay_feedback" | "feedback" | "fdbk" => setter.set_parameter(&params_clone.delay_feedback, value),
@@ -409,7 +417,7 @@ impl Editor for WebviewEditor {
                             let path_opt = current_path.map(std::path::PathBuf::from);
                             switch_file(&slot, 1, &slot_id, path_opt, webview_weak_clone.clone());
                         }
-                        IpcMessage::ProfileCaptured { slot_id, ir_name } => {
+                        IpcMessage::ProfileCaptured { slot_id: _, ir_name: _ } => {
                             // Empty profile hook callback
                         }
                         IpcMessage::UiReady => {
@@ -443,10 +451,22 @@ impl Editor for WebviewEditor {
                                     let input_peak_val = f32::from_bits(input_peak_bits);
                                     let buf_size = data_clone.dsp_metrics.buffer_size.load(Ordering::Relaxed);
                                     let s_rate = data_clone.dsp_metrics.sample_rate.load(Ordering::Relaxed);
+                                    let tuner_packed = data_clone.dsp_metrics.tuner_state.load(Ordering::Relaxed);
+                                    let tuner_active = (tuner_packed >> 8) & 0xFF;
+                                    let tuner_cents_raw = if tuner_active != 0 {
+                                        ((tuner_packed >> 32) & 0xFFFF) as i16
+                                    } else { 0 };
+                                    let tuner_note = ((tuner_packed >> 24) & 0xFF) as u8;
+                                    let tuner_octave = ((tuner_packed >> 16) & 0xFF) as i8;
+
+                                    let tuner_note_val: i32 = if tuner_active != 0 { tuner_note as i32 } else { -1 };
+                                    let tuner_octave_val: i32 = if tuner_active != 0 { tuner_octave as i32 } else { 0 };
+                                    let tuner_cents_val: f64 = if tuner_active != 0 { tuner_cents_raw as f64 / 100.0 } else { 0.0 };
 
                                     let script = format!(
-                                        "if (window.updateDspMetrics) window.updateDspMetrics({}, {}, {}, {}, {}, {}, {}, {});",
-                                        proc_time, block_dur, nam_time, cab_time, peak_val, buf_size, s_rate, input_peak_val
+                                        "if (window.updateDspMetrics) window.updateDspMetrics({}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {});",
+                                        proc_time, block_dur, nam_time, cab_time, peak_val, buf_size, s_rate, input_peak_val,
+                                        tuner_note_val, tuner_octave_val, tuner_cents_val
                                     );
                                     let _ = wv.0.evaluate_script(&script);
                                 }

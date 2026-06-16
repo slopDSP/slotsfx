@@ -38,6 +38,19 @@ octaver (with up and drop section, think Archetype Gojira) slot
 gloabal pitch shift - what are even some real time algos?
 doubler!!! great for live, prolly global - but is there more advanced ones rather than the basic whatever the dudes name was with the delayed channels
 
+----
 Tuning:
-Tuner
-Auto-tune - are there any good open source/general algos? fast, effecient, but good sounding
+Tuner - input tuner, between input element and the center element of the header. Are there known good tuner algorythms? right side of center, toggle switch that turns tuner in to auto tune, with dropdowns to set key. (my reference - stl tonality algo, really fast)
+Auto-tune - are there any good open source/general algos? fast, effecient, but good sounding (i use waves tune, but if better algos are there, lets use that)
+Basically - universal layout for both tuner and pitch tuning.
+Any refrences with similar implementation?
+
+- Tuner: YIN algorithm via yin_rs or pitch-detection crate — fast, accurate, proven = pick the one that will can be used better for the auto-tune too
+- Auto-tune: Same YIN detector + PSOLA pitch shifting (time-domain, lowest latency) or stftPitchShift (STFT-based, slightly higher latency but better quality) - implement both, but with toggle betweed ('Fast/Slow' auto tune modes)
+- UI: [IN Meter] [Gain] [◄ TUNER DISPLAY ►] [Pitch Encoder] [Logo] [Auto-Tune 🔀] [Key ▼] [OUT Gain] [Meter] (move visuals to logo menu)
+"You can reuse your existing EffectType::Pitch slot but replace the trivial gain-based shifting with real pitch shifting + pitch detection integration." - so we can introduce the pitch shifting too?
+Deafaults: tuner on, have to toggle auto tune off, default key C, auto tune fast, pitch encoder on 0 stp.
+
+
+
+----

@@ -10,10 +10,10 @@ use crate::dsp::cab::CabConvolver;
 use std::collections::HashMap;
 use crate::ui::SlotsEditorData;
 
-mod dsp;
 mod ui;
-mod ui_webview;
+pub mod dsp;
 mod ui_egui;
+mod ui_webview;
 mod registry;
 
 pub struct DspMetrics {
@@ -26,6 +26,7 @@ pub struct DspMetrics {
     pub slot_peaks: [std::sync::atomic::AtomicU32; 16],
     pub buffer_size: std::sync::atomic::AtomicU32,
     pub sample_rate: std::sync::atomic::AtomicU32,
+    pub tuner_state: std::sync::atomic::AtomicU64,
 }
 
 impl DspMetrics {
@@ -57,6 +58,7 @@ impl DspMetrics {
             ],
             buffer_size: std::sync::atomic::AtomicU32::new(0),
             sample_rate: std::sync::atomic::AtomicU32::new(0),
+            tuner_state: std::sync::atomic::AtomicU64::new(0),
         }
     }
 }
@@ -200,6 +202,25 @@ pub struct SlotsFxParams {
 
     #[id = "pitch_mix"]
     pub pitch_mix: FloatParam,
+
+    // --- Auto-Tune ---
+    #[id = "auto_tune_toggle"]
+    pub auto_tune_toggle: BoolParam,
+
+    #[id = "auto_tune_key"]
+    pub auto_tune_key: IntParam,
+
+    #[id = "auto_tune_scale"]
+    pub auto_tune_scale: IntParam,
+
+    #[id = "auto_tune_mode"]
+    pub auto_tune_mode: BoolParam,
+
+    #[id = "auto_tune_speed"]
+    pub auto_tune_speed: FloatParam,
+
+    #[id = "auto_tune_amount"]
+    pub auto_tune_amount: FloatParam,
 
     // --- Delay time ---
     #[id = "delay_time"]
@@ -446,6 +467,13 @@ impl SlotsFxParams {
 
             pitch_semi: FloatParam::new("Semitones", 0.0, FloatRange::Linear { min: -12.0, max: 12.0 }),
             pitch_mix: FloatParam::new("Pitch Mix", 0.5, FloatRange::Linear { min: 0.0, max: 1.0 }),
+
+            auto_tune_toggle: BoolParam::new("Auto-Tune", false),
+            auto_tune_key: IntParam::new("Key", 0, IntRange::Linear { min: 0, max: 11 }),
+            auto_tune_scale: IntParam::new("Scale", 0, IntRange::Linear { min: 0, max: 2 }),
+            auto_tune_mode: BoolParam::new("Auto-Tune Mode", false),
+            auto_tune_speed: FloatParam::new("Retune Speed", 0.5, FloatRange::Linear { min: 0.0, max: 1.0 }),
+            auto_tune_amount: FloatParam::new("Correction Amt", 1.0, FloatRange::Linear { min: 0.0, max: 1.0 }),
 
             delay_time: FloatParam::new("Time", 250.0, FloatRange::Linear { min: 50.0, max: 1000.0 }),
 
@@ -835,7 +863,10 @@ impl Plugin for SlotsFx {
         self.dry_right_buffer.resize(buffer_config.max_buffer_size as usize, 0.0);
         self.dsp_metrics.buffer_size.store(buffer_config.max_buffer_size as u32, std::sync::atomic::Ordering::Relaxed);
         self.dsp_metrics.sample_rate.store(buffer_config.sample_rate as u32, std::sync::atomic::Ordering::Relaxed);
+        self.dsp_metrics.tuner_state.store(0, std::sync::atomic::Ordering::Relaxed);
         self.processor.sample_rate = buffer_config.sample_rate as f32;
+        self.processor.tuner.reset(buffer_config.sample_rate as f32);
+        self.processor.autotune.reset(buffer_config.sample_rate as f32);
 
         let slots_json = self.params.slots_json.lock().unwrap().clone();
         if let Ok(slots) = serde_json::from_str::<Vec<serde_json::Value>>(&slots_json) {
@@ -867,7 +898,9 @@ impl Plugin for SlotsFx {
                             bypassed,
                             pan,
                             lane,
-                            effect: crate::dsp::EffectType::Pitch,
+                            effect: crate::dsp::EffectType::Pitch {
+                                shifter: crate::dsp::pitch_shifter::PitchShifter::new(self.processor.sample_rate, crate::dsp::pitch_shifter::ShiftMode::PsoLa),
+                            },
                             params: HashMap::new(),
                             tail_out: false,
                             fading_out: false,
@@ -1307,6 +1340,7 @@ impl Plugin for SlotsFx {
                     &self.dsp_metrics.nam_time_ns,
                     &self.dsp_metrics.cab_time_ns,
                     &self.dsp_metrics.slot_peaks,
+                    &self.dsp_metrics.tuner_state,
                 );
             }
 

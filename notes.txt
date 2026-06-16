@@ -112,4 +112,8 @@ and i think there are similar issues when multiple instances of the same slot ar
 
 besides the macros, do you see anything else fundamentally wrong with how instances are handle that would cause shit like that?
 
+[tuner] - chromatic guitar tuner - works greate
+[shifter] - poly ptuch shifter for guitar and other poly and mono tonal sources
+[tuning] - auto tuner
+
 ---

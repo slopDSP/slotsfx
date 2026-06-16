@@ -73,6 +73,13 @@ export const paramSpecs = {
   gate_threshold: { min: -60.0, max: 0.0, type: 'db', label: 'Threshold' },
   gate_attack: { min: 0.1, max: 50.0, type: 'ms', label: 'Attack' },
   gate_release: { min: 10.0, max: 500.0, type: 'ms', label: 'Release' },
+
+  auto_tune_toggle: { min: 0.0, max: 1.0, type: 'bool', label: 'Auto-Tune' },
+  auto_tune_key: { min: 0.0, max: 11.0, type: 'float', label: 'Key' },
+  auto_tune_scale: { min: 0.0, max: 2.0, type: 'float', label: 'Scale' },
+  auto_tune_mode: { min: 0.0, max: 1.0, type: 'bool', label: 'AT Mode' },
+  auto_tune_speed: { min: 0.0, max: 1.0, type: 'percent', label: 'Retune' },
+  auto_tune_amount: { min: 0.0, max: 1.0, type: 'percent', label: 'Amount' },
   macro_1: { min: 0.0, max: 1.0, type: 'percent', label: 'Macro 1' },
   macro_2: { min: 0.0, max: 1.0, type: 'percent', label: 'Macro 2' },
   macro_3: { min: 0.0, max: 1.0, type: 'percent', label: 'Macro 3' },

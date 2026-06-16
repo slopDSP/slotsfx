@@ -22,6 +22,7 @@ import {
   bindHeaderTranspose,
   bindHeaderGains,
   bindVisualizersToggle,
+  bindAutoTune,
   animateSlotVisualizers,
   bindModals,
   renderLogoDropdown,
@@ -34,8 +35,8 @@ import {
 const appEl = document.querySelector('#app');
 appEl.innerHTML = `
   <div class="chassis">
-    <div class="chassis-header" style="display:flex;justify-content:space-between;align-items:center;">
-      <div class="header-left" style="display:flex;align-items:center;gap:8px;">
+    <div class="chassis-header">
+      <div class="header-in-controls">
         <span style="font-size:8px;font-weight:800;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.5px;">IN</span>
         <div class="header-meter-vertical" id="input-meter-strip" title="Input Level">
           <div class="meter-bar-fill-vertical" id="input-meter-fill"></div>
@@ -44,13 +45,24 @@ appEl.innerHTML = `
           <div class="gain-knob"><div class="gain-pointer" id="header-in-gain-pointer"></div></div>
           <span class="gain-value" id="header-in-gain-value">0.0 dB</span>
         </div>
-      </div>
-
-      <div class="header-center" style="display:flex;align-items:center;gap:14px;">
         <div class="header-pitch-encoder" id="header-pitch-encoder" title="Drag to adjust Pitch Transpose">
           <div class="encoder-knob"><div class="encoder-pointer" id="header-transpose-pointer"></div></div>
           <span class="encoder-value" id="header-transpose-value">0 st</span>
         </div>
+      </div>
+
+      <div class="header-tuner-cell">
+        <div class="header-tuner" id="header-tuner-display" title="Chromatic Tuner">
+          <span class="tuner-note" id="tuner-note">--</span>
+          <span class="tuner-octave" id="tuner-octave"></span>
+          <div class="tuner-cents-bar" id="tuner-cents-bar">
+            <div class="tuner-cents-fill" id="tuner-cents-fill"></div>
+            <div class="tuner-cents-center" id="tuner-cents-center"></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="header-logo-cell">
         <div class="logo-container-wrapper" id="logo-wrapper">
           <div class="chassis-logo" style="font-family:var(--font-header);font-size:13px;font-weight:900;letter-spacing:1.5px;color:#fff;background:linear-gradient(135deg,#FFF 0%,#A27DDF 100%);-webkit-background-clip:text;-webkit-text-fill-color:transparent;display:flex;align-items:center;gap:6px;">
             SlotsFX
@@ -58,13 +70,39 @@ appEl.innerHTML = `
           </div>
           <div class="logo-dropdown-menu" id="logo-presets-menu"></div>
         </div>
-        <button class="header-spectrum-toggle" id="btn-spectrum-toggle" title="Toggle Real-Time Slot Visualizers">
-          <span>VISUALS</span>
-          <span class="toggle-led" id="spectrum-toggle-led"></span>
-        </button>
       </div>
 
-      <div class="header-right" style="display:flex;align-items:center;gap:8px;">
+      <div class="header-tuning-cell">
+        <div class="header-autotune" id="header-autotune-section">
+          <label class="autotune-toggle-label">
+            <span class="autotune-label-text">AUTO</span>
+            <div class="autotune-toggle-track" id="btn-autotune-toggle" title="Toggle Auto-Tune">
+              <div class="autotune-toggle-thumb" id="autotune-toggle-thumb"></div>
+            </div>
+          </label>
+          <select class="autotune-key-select" id="select-autotune-key" title="Root Key">
+            <option value="0">C</option>
+            <option value="1">C#</option>
+            <option value="2">D</option>
+            <option value="3">D#</option>
+            <option value="4">E</option>
+            <option value="5">F</option>
+            <option value="6">F#</option>
+            <option value="7">G</option>
+            <option value="8">G#</option>
+            <option value="9">A</option>
+            <option value="10">A#</option>
+            <option value="11">B</option>
+          </select>
+          <select class="autotune-scale-select" id="select-autotune-scale" title="Scale">
+            <option value="0">Chromatic</option>
+            <option value="1">Major</option>
+            <option value="2">Minor</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="header-out-controls">
         <div class="header-gain-encoder" id="header-out-gain-encoder" title="Drag to adjust Output Gain">
           <div class="gain-knob"><div class="gain-pointer" id="header-out-gain-pointer"></div></div>
           <span class="gain-value" id="header-out-gain-value">0.0 dB</span>
@@ -195,7 +233,7 @@ renderMacrosStrip();
 
 bindHeaderTranspose();
 bindHeaderGains();
-bindVisualizersToggle();
+bindAutoTune();
 requestAnimationFrame(animateSlotVisualizers);
 bindModals();
 renderLogoDropdown();

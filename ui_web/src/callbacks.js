@@ -116,7 +116,9 @@ window.onDirectoryFilesLoaded = (slotId, slotType, filesJson) => {
 
 // --- DSP metrics update (called every 100ms) ---
 
-window.updateDspMetrics = (procTimeNs, blockDurNs, namTimeNs, cabTimeNs, peakVal, bufSize, sRate, inputPeak, slotPeaks) => {
+const NOTE_NAMES = ['C','C#','D','D#','E','F','F#','G','G#','A','A#','B'];
+
+window.updateDspMetrics = (procTimeNs, blockDurNs, namTimeNs, cabTimeNs, peakVal, bufSize, sRate, inputPeak, tunerNote, tunerOctave, tunerCents, slotPeaks) => {
   const loadPercent = blockDurNs > 0 ? (procTimeNs / blockDurNs) * 100 : 0;
 
   const cpuLoadEl = document.getElementById('perf-cpu-load');
@@ -174,6 +176,47 @@ window.updateDspMetrics = (procTimeNs, blockDurNs, namTimeNs, cabTimeNs, peakVal
     const pct = Math.max(0, Math.min(100, ((db + 60) / 60) * 100));
     outMeterFill.style.height = `${pct}%`;
     outMeterFill.style.backgroundColor = db > -3 ? '#ff3333' : db > -12 ? '#fbbf24' : '#4ade80';
+  }
+
+  // Tuner display
+  const tunerNoteEl = document.getElementById('tuner-note');
+  const tunerOctaveEl = document.getElementById('tuner-octave');
+  const tunerCentsBar = document.getElementById('tuner-cents-fill');
+  const tunerCentsCenter = document.getElementById('tuner-cents-center');
+  const tunerActive = tunerNote !== undefined && tunerNote >= 0;
+  if (tunerNoteEl) {
+    if (tunerActive) {
+      const noteName = NOTE_NAMES[tunerNote % 12] || '?';
+      tunerNoteEl.textContent = noteName;
+      tunerNoteEl.style.color = Math.abs(tunerCents) < 2 ? '#4ADE80' : Math.abs(tunerCents) < 8 ? '#fbbf24' : 'var(--text-active)';
+    } else {
+      tunerNoteEl.textContent = '--';
+      tunerNoteEl.style.color = 'var(--text-muted)';
+    }
+  }
+  if (tunerOctaveEl) {
+    tunerOctaveEl.textContent = tunerActive ? String(tunerOctave) : '';
+  }
+  state.tuner_active = tunerActive;
+  if (tunerCentsCenter) {
+    tunerCentsCenter.style.display = tunerActive ? 'block' : 'none';
+  }
+  if (tunerCentsBar) {
+    if (tunerActive) {
+      const absCents = Math.min(Math.abs(tunerCents), 50);
+      const pct = (absCents / 50) * 100;
+      if (tunerCents >= 0) {
+        tunerCentsBar.style.left = '50%';
+        tunerCentsBar.style.width = `${pct}%`;
+      } else {
+        tunerCentsBar.style.left = `${50 - pct}%`;
+        tunerCentsBar.style.width = `${pct}%`;
+      }
+      tunerCentsBar.style.backgroundColor = Math.abs(tunerCents) < 2 ? '#4ADE80' : '#fbbf24';
+    } else {
+      tunerCentsBar.style.width = '0%';
+      tunerCentsBar.style.left = '50%';
+    }
   }
 
   if (slotPeaks && Array.isArray(slotPeaks)) state.current_slot_peaks = slotPeaks;
@@ -349,6 +392,44 @@ window.onPresetsLoaded = (presetsJsonStr) => {
   } catch (e) { console.error('onPresetsLoaded error:', e); }
 };
 
+// --- Init: Auto-Tune controls ---
+
+export function bindAutoTune() {
+  const toggleTrack = document.getElementById('btn-autotune-toggle');
+  const toggleThumb = document.getElementById('autotune-toggle-thumb');
+  const keySelect = document.getElementById('select-autotune-key');
+  const scaleSelect = document.getElementById('select-autotune-scale');
+
+  if (!toggleTrack) return;
+
+  function updateToggleUI(enabled) {
+    toggleTrack.classList.toggle('active', enabled);
+    if (toggleThumb) toggleThumb.style.transform = enabled ? 'translateX(14px)' : 'translateX(0)';
+  }
+
+  toggleTrack.addEventListener('click', () => {
+    state.auto_tune_enabled = !state.auto_tune_enabled;
+    updateToggleUI(state.auto_tune_enabled);
+    sendIPCMessage('set_param', { param_id: 'auto_tune_toggle', value: state.auto_tune_enabled ? 1.0 : 0.0 });
+  });
+
+  if (keySelect) {
+    keySelect.addEventListener('change', () => {
+      state.auto_tune_key = parseInt(keySelect.value);
+      sendIPCMessage('set_param', { param_id: 'auto_tune_key', value: state.auto_tune_key });
+    });
+  }
+
+  if (scaleSelect) {
+    scaleSelect.addEventListener('change', () => {
+      state.auto_tune_scale = parseInt(scaleSelect.value);
+      sendIPCMessage('set_param', { param_id: 'auto_tune_scale', value: state.auto_tune_scale });
+    });
+  }
+
+  updateToggleUI(state.auto_tune_enabled);
+}
+
 // --- Init: Header transpose encoder ---
 
 export function bindHeaderTranspose() {
@@ -369,14 +450,14 @@ export function bindHeaderTranspose() {
     function onMouseMove(ev) {
       const stepDelta = Math.round((startY - ev.clientY) / 6);
       const newVal = Math.max(-24, Math.min(24, startVal + stepDelta));
-      if (newVal !== currentVal) { currentVal = newVal; updateVisuals(currentVal); sendIPCMessage('set_header_pitch', { value: currentVal }); }
+      if (newVal !== currentVal) { currentVal = newVal; updateVisuals(currentVal); sendIPCMessage('set_param', { param_id: 'pitch_semi', value: currentVal }); }
     }
     function onMouseUp() { document.removeEventListener('mousemove', onMouseMove); document.removeEventListener('mouseup', onMouseUp); encoder.style.cursor = 'ns-resize'; }
     document.addEventListener('mousemove', onMouseMove);
     document.addEventListener('mouseup', onMouseUp);
   });
 
-  encoder.addEventListener('dblclick', () => { currentVal = 0; updateVisuals(0); sendIPCMessage('set_header_pitch', { value: 0 }); });
+  encoder.addEventListener('dblclick', () => { currentVal = 0; updateVisuals(0); sendIPCMessage('set_param', { param_id: 'pitch_semi', value: 0 }); });
   updateVisuals(0);
 }
 
@@ -586,6 +667,10 @@ export function renderLogoDropdown() {
   if (!hasPresets) html += `<div class="logo-dropdown-section-title">No local presets</div>`;
 
   html += `
+    <button class="logo-dropdown-item logo-dropdown-action" id="dropdown-action-visuals">
+      <span>Visualizers</span>
+      <span class="toggle-led ${state.visualizers_enabled ? 'active' : ''}" id="visuals-menu-led"></span>
+    </button>
     <button class="logo-dropdown-item logo-dropdown-action" id="dropdown-action-save">Save Preset...</button>
     <button class="logo-dropdown-item logo-dropdown-action" id="dropdown-action-manage">Manage Presets...</button>
     <button class="logo-dropdown-item logo-dropdown-action" id="dropdown-action-settings">Settings...</button>`;
@@ -598,6 +683,19 @@ export function renderLogoDropdown() {
       sendIPCMessage('load_preset', { category: btn.getAttribute('data-category'), name: btn.getAttribute('data-name') });
       dropdown.classList.remove('show');
     });
+  });
+
+  dropdown.querySelector('#dropdown-action-visuals')?.addEventListener('click', e => {
+    e.stopPropagation();
+    dropdown.classList.remove('show');
+    state.visualizers_enabled = !state.visualizers_enabled;
+    const led = document.getElementById('visuals-menu-led');
+    if (led) led.classList.toggle('active', state.visualizers_enabled);
+    if (!state.visualizers_enabled) {
+      document.querySelectorAll('.slot-visualizer-canvas').forEach(canvas => {
+        canvas.getContext('2d').clearRect(0, 0, canvas.width, canvas.height);
+      });
+    }
   });
 
   dropdown.querySelector('#dropdown-action-save')?.addEventListener('click', e => {

@@ -37,7 +37,19 @@ export const state = {
   dragging_param: null,
   dragging_param_slot_id: null,
   visualizers_enabled: true,
+  visualizers_in_logo_menu: true,
   paired_sender_id: null,
   temp_capture: null,
   current_slot_peaks: null,
+  // Tuner state
+  tuner_note: '',
+  tuner_cents: 0.0,
+  tuner_active: false,
+  // Auto-tune state
+  auto_tune_enabled: false,
+  auto_tune_key: 0,
+  auto_tune_scale: 0,
+  auto_tune_mode: 0, // 0 = Fast (PSOLA), 1 = Slow (Phase Vocoder)
+  auto_tune_speed: 0.5,
+  auto_tune_amount: 1.0,
 };
