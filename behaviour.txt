@@ -10,7 +10,34 @@ cab capture - currently broken, capture itself was working fine, the ui loading 
 sender -> cab -> receiver structure (should be obvious from the code)
 sender sends the signal -> receiver profiles -> it takes the file and loads it in the slot -> A/B audition -> optional rename the file (there is already the edit name button)
 cab A/B - MAKE SURE THERE IS NO VOLUME DIFF!!!
+A - bypass slotsfx
+B - slotsfx loaded, source plugin bypassed
+DO NOT FUCK UP THE VOLUME DIFF!!! SHOULD AUDIOTION THE SAME VOLUME!!! OBVIOUSLY!!!!
+
+Cab gain issue, for the same ir - nadir -12.6, my cab is like +3.2, and -3.7 with normalization
+The convolution math and all gain stages check out at 0 dB defaults. 
+Could you test with a specific input signal (e.g., -18 dBFS pink noise) and compare peak/RMS readings between NADIR and our cab (normalize OFF) using your DAW's native meter? 
+That'll help isolate whether it's a convolution level difference or a metering discrepancy.
 
 File loaders:
 should have a pop up menu with currently loaded directory, so possible to broswe from plugin (it was implemented, got broken)
 GLOBAL SETTINGS! There are already settings in the header menu for this - user should be able to set their ir/amps/captures/whatever directory once, and plugin should remember it (writes a settings file to disk?)
+
+Output:
+on each slot and on master - clipper? how hard would it be to implement a clipper on select slots that make sense and on the master?
+should be performant! possibly with diff algos. how cpu expensive is it? all the clippers ive tried been cpu heavy, but should they?
+performance reference - jst bg-drums - fastest one ive tried
+perfect reference - newfanglend saturate
+the same goes for limiter
+
+Stereo:
+Panning is broken
+
+Near future fx:
+octaver (with up and drop section, think Archetype Gojira) slot
+gloabal pitch shift - what are even some real time algos?
+doubler!!! great for live, prolly global - but is there more advanced ones rather than the basic whatever the dudes name was with the delayed channels
+
+Tuning:
+Tuner
+Auto-tune - are there any good open source/general algos? fast, effecient, but good sounding

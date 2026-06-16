@@ -391,39 +391,45 @@ export function bindHeaderGains() {
   const outValDisplay = document.getElementById('header-out-gain-value');
   if (!inEncoder || !outEncoder) return;
 
-  let inVal = 0.0, startYIn = 0, startValIn = 0;
   function updateInVisuals(val) {
     inPointer.style.transform = `rotate(${(val / 24) * 135}deg)`;
     inValDisplay.textContent = `${val > 0 ? '+' : ''}${val.toFixed(1)} dB`;
   }
   inEncoder.addEventListener('mousedown', e => {
-    startYIn = e.clientY; startValIn = inVal; inEncoder.style.cursor = 'grabbing';
+    const startVal = state.input_gain;
+    const startY = e.clientY;
+    inEncoder.style.cursor = 'grabbing';
     function onMouseMove(ev) {
-      const newVal = Math.max(-24.0, Math.min(24.0, startValIn + (startYIn - ev.clientY) * 0.15));
-      if (newVal !== inVal) { inVal = newVal; updateInVisuals(inVal); sendIPCMessage('set_param', { param_id: 'input_gain', value: inVal }); }
+      const newVal = Math.max(-24.0, Math.min(24.0, startVal + (startY - ev.clientY) * 0.15));
+      state.input_gain = newVal;
+      updateInVisuals(newVal);
+      sendIPCMessage('set_param', { param_id: 'input_gain', value: newVal });
     }
     function onMouseUp() { document.removeEventListener('mousemove', onMouseMove); document.removeEventListener('mouseup', onMouseUp); inEncoder.style.cursor = 'ns-resize'; syncSlotsToRust(); }
     document.addEventListener('mousemove', onMouseMove);
     document.addEventListener('mouseup', onMouseUp);
   });
-  inEncoder.addEventListener('dblclick', () => { inVal = 0.0; updateInVisuals(0.0); sendIPCMessage('set_param', { param_id: 'input_gain', value: 0.0 }); syncSlotsToRust(); });
+  inEncoder.addEventListener('dblclick', () => { state.input_gain = 0.0; updateInVisuals(0.0); sendIPCMessage('set_param', { param_id: 'input_gain', value: 0.0 }); syncSlotsToRust(); });
 
-  let outVal = 0.0, startYOut = 0, startValOut = 0;
   function updateOutVisuals(val) {
     outPointer.style.transform = `rotate(${(val / 24) * 135}deg)`;
     outValDisplay.textContent = `${val > 0 ? '+' : ''}${val.toFixed(1)} dB`;
   }
   outEncoder.addEventListener('mousedown', e => {
-    startYOut = e.clientY; startValOut = outVal; outEncoder.style.cursor = 'grabbing';
+    const startVal = state.output_gain;
+    const startY = e.clientY;
+    outEncoder.style.cursor = 'grabbing';
     function onMouseMove(ev) {
-      const newVal = Math.max(-24.0, Math.min(24.0, startValOut + (startYOut - ev.clientY) * 0.15));
-      if (newVal !== outVal) { outVal = newVal; updateOutVisuals(outVal); sendIPCMessage('set_param', { param_id: 'output_gain', value: outVal }); }
+      const newVal = Math.max(-24.0, Math.min(24.0, startVal + (startY - ev.clientY) * 0.15));
+      state.output_gain = newVal;
+      updateOutVisuals(newVal);
+      sendIPCMessage('set_param', { param_id: 'output_gain', value: newVal });
     }
     function onMouseUp() { document.removeEventListener('mousemove', onMouseMove); document.removeEventListener('mouseup', onMouseUp); outEncoder.style.cursor = 'ns-resize'; syncSlotsToRust(); }
     document.addEventListener('mousemove', onMouseMove);
     document.addEventListener('mouseup', onMouseUp);
   });
-  outEncoder.addEventListener('dblclick', () => { outVal = 0.0; updateOutVisuals(0.0); sendIPCMessage('set_param', { param_id: 'output_gain', value: 0.0 }); syncSlotsToRust(); });
+  outEncoder.addEventListener('dblclick', () => { state.output_gain = 0.0; updateOutVisuals(0.0); sendIPCMessage('set_param', { param_id: 'output_gain', value: 0.0 }); syncSlotsToRust(); });
 
   updateInVisuals(0.0);
   updateOutVisuals(0.0);

@@ -925,7 +925,7 @@ impl Plugin for SlotsFx {
                         let mut convolver = CabConvolver::new();
                         if let Some(ref p) = path {
                             if let Some((ir_l, ir_r)) = cab_cache.get(p) {
-                                convolver.set_ir(ir_l.clone(), ir_r.clone(), true);
+                                convolver.set_ir(ir_l.clone(), ir_r.clone(), cab_normalize);
                             } else if p.exists() {
                                 match hound::WavReader::open(p) {
                                     Ok(mut reader) => {
@@ -954,7 +954,7 @@ impl Plugin for SlotsFx {
                                             } else {
                                                 (samples.clone(), samples)
                                             };
-                                            convolver.set_ir(ir_l.clone(), ir_r.clone(), true);
+                                            convolver.set_ir(ir_l.clone(), ir_r.clone(), cab_normalize);
                                             cab_cache.insert(p.clone(), (ir_l, ir_r));
                                         }
                                     }

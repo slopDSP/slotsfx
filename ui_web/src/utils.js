@@ -148,6 +148,10 @@ export function bindKnobDragging(parentContainer) {
       startVal = isMacro
         ? (state.macros[parseInt(paramId.split('_')[1]) - 1] ?? 0.0)
         : (slot.params[paramId] ?? getParamDefault(paramId));
+      // Pre-sync the global FloatParam to the per-slot value so it doesn't jump on first move
+      if (!isMacro) {
+        sendIPCMessage('set_param', { param_id: paramId, value: startVal });
+      }
       knob.style.cursor = 'grabbing';
       knob.classList.add('dragging');
       document.addEventListener('mousemove', onMouseMove);
